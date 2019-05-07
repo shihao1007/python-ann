@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun May  5 18:47:55 2019
-
-Editor:
-    Shihao Ran
-    STIM Laboratory
-"""
-
-# -*- coding: utf-8 -*-
-"""
 Created on Mon Apr 15 13:50:22 2019
 
-A simple Neural Net work trained on 1D Mie scattering simulations
+A deeper Neural Net work trained on 1D Mie scattering simulations
 
+More nodes leads to longer training time and more vunlerable to overfitting
 
 Editor:
     Shihao Ran
@@ -26,11 +18,7 @@ from matplotlib import pyplot as plt
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
-from keras.callbacks import EarlyStopping
-from keras.layers import Dropout
 from keras.callbacks import ModelCheckpoint
-from keras.models import load_model
-from keras.initializers import glorot_normal
 
 #%%
 # specify the related training parameters

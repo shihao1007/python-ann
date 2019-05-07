@@ -4,6 +4,8 @@ Created on Wed Apr 24 15:21:52 2019
 
 Add noise to the far field LINE simulation
 
+This script is part of the noise_test_pipe.py
+
 Editor:
     Shihao Ran
     STIM Laboratory
@@ -12,9 +14,6 @@ Editor:
 import numpy as np
 import matplotlib.pyplot as plt
 from keras.models import load_model
-import scipy as sp
-import scipy.special
-import math
 import sys
 
 
@@ -179,27 +178,4 @@ plt.plot(perc_list, intensity_error[:, 2], label = 'Absolute ANN')
 plt.xlabel('Noise Percentage')
 plt.ylabel('Relative Error (Sphere Radius)')
 plt.legend()
-
-##%%
-#plt.figure()
-#plt.subplot(311)
-#plt.plot(NA_list[2:], complex_error[2:, 0], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 0], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Refractive Index)')
-#plt.legend()
-#
-#plt.subplot(312)
-#plt.plot(NA_list[2:], complex_error[2:, 1], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 1], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Attenuation Coefficient)')
-#plt.legend()
-#
-#plt.subplot(313)
-#plt.plot(NA_list[2:], complex_error[2:, 2], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 2], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Sphere Radius)')
-#plt.legend()
 

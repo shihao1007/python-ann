@@ -2,6 +2,13 @@
 """
 Created on Thu Apr 25 16:19:51 2019
 
+This script runs a pipeline including:
+    training the model
+    test the model
+    plot the performance
+    test the model on synthetic noisy data
+    plot the noise sensitivity
+
 Editor:
     Shihao Ran
     STIM Laboratory
@@ -11,15 +18,120 @@ Editor:
 # import necessary packages
 import numpy as np
 from matplotlib import pyplot as plt
+import sys
 
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
-from keras.callbacks import EarlyStopping
-from keras.layers import Dropout
 from keras.callbacks import ModelCheckpoint
-from keras.models import load_model
 from keras.initializers import glorot_normal
+
+def calculate_error(imdata, option = 'complex'):
+    """
+    make a prediction based on the input data set
+    calculate the relative error between the prediction and the testing ground truth
+    if the input data is intensity images, set the channel number to 1
+    otherwise it is complex images, set the channel number to 2
+    
+    params:
+        imdata: the testing set
+        option: the type of the testing
+    
+    return:
+        y_off_perc: relative RMSE
+    
+    """
+    # use different models to test depend on the data set type
+    if option == 'intensity':
+        y_pred = intensity_ANN.predict(imdata)
+    else:
+        y_pred = complex_ANN.predict(imdata)
+    
+    y_pred[:, 1] /= 100
+    
+    # calculate the relative error of the sum of the B vector
+    y_off = np.abs(y_test - y_pred)
+    
+    y_off_perc = np.average(y_off / [2.0, 0.05, 2.0], axis = 0) * 100
+    
+    return y_off_perc
+
+
+def band_noise(S, low, high):
+    # S is the input signal
+    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
+    
+    S_noise = np.zeros(S.shape)
+    # for each image in the data set
+    for i in range(S.shape[0]):
+        # for each channel in the image
+        # real and imaginary part
+        for j in range(S.shape[-1]):
+            amp = np.std(S[i, :, j])*2
+            # Gaussian noise in frequency domain
+            eta_f = np.random.normal(0, amp, S.shape[1])
+            
+            # calculate the number of values in the signal
+            N = eta_f.shape[0]
+            
+            # calculate the factor indices
+            lfi = N * low / 2
+            hfi = N * high / 2
+            
+            lf0 = int(lfi)
+            lf1 = N-int(lfi)
+            
+            hf0 = int(hfi)
+            hf1 = N - int(hfi)
+            
+            # apply the bandpass filter
+            eta_f[0:lf0] = 0
+            eta_f[hf0:hf1] = 0
+            eta_f[lf1:N] = 0
+            
+            # inverse FFT to generate noise in the real domain
+            eta_if = np.fft.ifft(eta_f)
+            S_noise[i, :, j] = S[i, :, j] + np.real(eta_if)
+   
+    return S_noise
+
+def perc_noise(S, perc):
+    # S is the input signal
+    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
+    
+    S_noise = np.zeros(S.shape)
+    # for each image in the data set
+    for i in range(S.shape[0]):
+        # for each channel in the image
+        # real and imaginary part
+        for j in range(S.shape[-1]):
+            amp = perc*0.25
+            # Gaussian noise in frequency domain
+            eta_f = np.random.normal(0, amp, S.shape[1])
+            
+            S_noise[i, :, j] = S[i, :, j] + eta_f
+   
+    return S_noise
+
+def square_noise(S, perc):
+    
+    # S is the input signal
+    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
+    
+    S_noise = np.zeros(S.shape)
+    # for each image in the data set
+    for i in range(S.shape[0]):
+        # for each channel in the image
+        # real and imaginary part
+        for j in range(S.shape[-1]):
+            amp = perc*0.25
+            # Gaussian noise in frequency domain
+            eta_f = np.random.normal(0, amp, S.shape[1])
+            
+            S_noise[i, :, j] = S[i, :, j] + eta_f**2 * 2
+   
+    return S_noise
+
 #%%
 # specify the related training parameters
 
@@ -214,122 +326,10 @@ plt.xlabel('epoch')
 #plt.legend(['train', 'test'], loc='upper left')
 plt.show()
 
+
 #%%
-
-import sys
-
-
-def calculate_error(imdata, option = 'complex'):
-    """
-    make a prediction based on the input data set
-    calculate the relative error between the prediction and the testing ground truth
-    if the input data is intensity images, set the channel number to 1
-    otherwise it is complex images, set the channel number to 2
-    
-    params:
-        imdata: the testing set
-        option: the type of the testing
-    
-    return:
-        y_off_perc: relative RMSE
-    
-    """
-    # use different models to test depend on the data set type
-    if option == 'intensity':
-        y_pred = intensity_ANN.predict(imdata)
-    else:
-        y_pred = complex_ANN.predict(imdata)
-    
-    y_pred[:, 1] /= 100
-    
-    # calculate the relative error of the sum of the B vector
-    y_off = np.abs(y_test - y_pred)
-    
-    y_off_perc = np.average(y_off / [2.0, 0.05, 2.0], axis = 0) * 100
-    
-    return y_off_perc
-
-
-def band_noise(S, low, high):
-    # S is the input signal
-    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
-    
-    S_noise = np.zeros(S.shape)
-    # for each image in the data set
-    for i in range(S.shape[0]):
-        # for each channel in the image
-        # real and imaginary part
-        for j in range(S.shape[-1]):
-            amp = np.std(S[i, :, j])*2
-            # Gaussian noise in frequency domain
-            eta_f = np.random.normal(0, amp, S.shape[1])
-            
-            # calculate the number of values in the signal
-            N = eta_f.shape[0]
-            
-            # calculate the factor indices
-            lfi = N * low / 2
-            hfi = N * high / 2
-            
-            lf0 = int(lfi)
-            lf1 = N-int(lfi)
-            
-            hf0 = int(hfi)
-            hf1 = N - int(hfi)
-            
-            # apply the bandpass filter
-            eta_f[0:lf0] = 0
-            eta_f[hf0:hf1] = 0
-            eta_f[lf1:N] = 0
-            
-            # inverse FFT to generate noise in the real domain
-            eta_if = np.fft.ifft(eta_f)
-            S_noise[i, :, j] = S[i, :, j] + np.real(eta_if)
-   
-    return S_noise
-
-def perc_noise(S, perc):
-    # S is the input signal
-    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
-    
-    S_noise = np.zeros(S.shape)
-    # for each image in the data set
-    for i in range(S.shape[0]):
-        # for each channel in the image
-        # real and imaginary part
-        for j in range(S.shape[-1]):
-            amp = perc*0.25
-            # Gaussian noise in frequency domain
-            eta_f = np.random.normal(0, amp, S.shape[1])
-            
-            S_noise[i, :, j] = S[i, :, j] + eta_f
-   
-    return S_noise
-
-def square_noise(S, perc):
-    
-    # S is the input signal
-    # amp is the amplitude of the noise or the standard deviation of the Gaussian noise
-    
-    S_noise = np.zeros(S.shape)
-    # for each image in the data set
-    for i in range(S.shape[0]):
-        # for each channel in the image
-        # real and imaginary part
-        for j in range(S.shape[-1]):
-            amp = perc*0.25
-            # Gaussian noise in frequency domain
-            eta_f = np.random.normal(0, amp, S.shape[1])
-            
-            S_noise[i, :, j] = S[i, :, j] + eta_f**2 * 2
-   
-    return S_noise
-#%%        
-
-# center obscuration of the objective when calculating bandpass filter
 low = 0.0
 perc_low = 0
-# numerical aperture of the objective
 perc_high = 1
 
 # number of different numerical apertures to be tested
@@ -360,10 +360,8 @@ for perc_idx in range(nb_noise):
     perc = perc_list[perc_idx]
     
     X_test_noise = perc_noise(X_test, perc)
-#    X_test_intensity_noise = square_noise(X_test_intensity, perc)
     X_test_intensity_noise = perc_noise(X_test_intensity, np.sqrt(2)*perc)
-#    X_test_intensity_noise = np.sqrt(X_test_noise[...,0]**2 + X_test_noise[...,1]**2)
-#    X_test_intensity_noise = X_test_intensity_noise[...,None]
+    
     # handle complex model first
     complex_error[perc_idx, :] = calculate_error(X_test_noise, option = 'complex')
     
@@ -403,27 +401,3 @@ plt.xlabel('Noise Percentage')
 plt.ylabel('Relative Error (Sphere Radius)')
 plt.legend()
 plt.suptitle('Noise Test with '+str(num_nodes)+' nodes')
-
-##%%
-#plt.figure()
-#plt.subplot(311)
-#plt.plot(NA_list[2:], complex_error[2:, 0], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 0], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Refractive Index)')
-#plt.legend()
-#
-#plt.subplot(312)
-#plt.plot(NA_list[2:], complex_error[2:, 1], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 1], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Attenuation Coefficient)')
-#plt.legend()
-#
-#plt.subplot(313)
-#plt.plot(NA_list[2:], complex_error[2:, 2], label = 'Complex ANN')
-#plt.plot(NA_list[2:], intensity_error[2:, 2], label = 'Intensity ANN')
-#plt.xlabel('NA')
-#plt.ylabel('Relative Error (Sphere Radius)')
-#plt.legend()
-
