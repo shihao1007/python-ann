@@ -232,7 +232,7 @@ def cal_feature_space(a_min, a_max,
     
     return a, nr, ni
 
-def calculate_error(imdata, option = 'complex'):
+def calculate_error(imdata, y_test, option = 'complex'):
     """
     make a prediction based on the input data set
     calculate the relative error between the prediction and the testing ground truth
@@ -326,135 +326,120 @@ E = [1, 0, 0]               # electric field vector
 # half of the grid size
 halfgrid = np.ceil(fov / 2) * (padding * 2 + 1)
 
-# features
-a_min = 1.0
-a_max = 2.0
 
-nr_min = 1.1
-nr_max = 2.0
-
-ni_min = 0.01
-ni_max = 0.05
 
 # dimention of the data set
-num = 30
-
-a, nr, ni = cal_feature_space(a_min, a_max,
-                              nr_min, nr_max,
-                              ni_min, ni_max, num)
-
-#get the maximal order of the integration
-l = get_order(a_max, lambDa)
+num = 10
+num_bp = 100
 
 # center obscuration of the objective when calculating bandpass filter
 NA_in = 0.0
 # numerical aperture of the objective
-NA_out = 0.3
+NA_out = 1.01
 
 # number of different numerical apertures to be tested
-nb_NA = 8
+nb_NA = 100
 
 # allocate a list of the NA
-NA_list = np.linspace(0.05, NA_out, nb_NA)
+NA_list = np.linspace(0.02, NA_out, nb_NA)
 
 
 # total number of images in the data set
-num_samples = num ** 3
+num_samples = num ** 3 * num_bp
 
-test_size = 0.2
+test_size = 0.1
 num_test = int(num_samples * test_size)
 num_test_in_group = int(num_test / num)
 
+num_nodes = 5
+
 # pre load y train and y test
 #y_train = np.load(r'D:\irimages\irholography\CNN\data_v9_far_field\split_data\train\y_train.npy')
-y_test = np.load(r'D:\irimages\irholography\CNN\data_v12_far_line\split_data\y_test.npy')
+y_test_raw = np.load(r'D:\irimages\irholography\CNN\\ANN_more_bandpass_HD\data\y_test.npy')
+
+# down sample y_test here also
+ds_ratio = 50
+y_test_ds = y_test_raw[::ds_ratio]
+num_test_ds = int(num_test/ds_ratio)
 
 # pre load intensity and complex CNNs
-complex_ANN = load_model(r'D:\irimages\irholography\CNN\ANN_v2_far_line\complex_model_dropout')
-intensity_ANN = load_model(r'D:\irimages\irholography\CNN\ANN_v2_far_line\intensity_model_dropout')
+complex_ANN = load_model(r'D:\irimages\irholography\CNN\\ANN_more_bandpass_HD\model\complex_model_'+str(num_nodes)+'nodes')
+intensity_ANN = load_model(r'D:\irimages\irholography\CNN\\ANN_more_bandpass_HD\model\absolute_model_'+str(num_nodes)+'nodes')
 
 # parent directory of the data set
-data_dir = r'D:\irimages\irholography\CNN\ANN_v2_far_line'
+data_dir = r'D:\irimages\irholography\CNN\\ANN_more_bandpass_HD\bandpass_test'
 
 # allocate space for complex and intensity accuracy
 complex_error = np.zeros((nb_NA, 3), dtype = np.float64)
-intensity_error = np.zeros((nb_NA, 3), dtype = np.float64)
+absolute_error = np.zeros((nb_NA, 3), dtype = np.float64)
 
+cnt = 0
 for NA_idx in range(nb_NA):
     
-    NA = NA_list[NA_idx]
-    scatter_matrix = cal_line_scatter_matrix(l, k, k_dir, res, fov,
-                                             working_dis, scale_factor)
+    X_test = np.load(data_dir + '\\' + 'X_test_'+str(NA_idx)+'.npy')
+    X_test_absolute = np.load(data_dir + '\\' + 'X_test_abs_'+str(NA_idx)+'.npy')
     
-    X_test = np.zeros((num_test, line_size, 2))
-    X_test_intensity = np.zeros((num_test, line_size, 1))
-    
-    print('Banbpassing the ' + str(NA_idx + 1) + 'th filter \n')
-    cnt = 0
-    for idx in range(num_test):
-        
-        n = y_test[idx, 0] + 1j*y_test[idx, 1]
-        a = y_test[idx, 2]
-    
-        B = coeff_b(l, k, n, a)
-        
-        # integrate through all the orders to get the farfield in the Fourier Domain
-        E_scatter_fft = np.sum(scatter_matrix * B, axis = -1) * scale_factor
-        
-        bpf = new_bpf(simFov, simRes, NA_in, NA)
-        bpf_line = bpf[0, :int(simRes/2)+1]
-
-        # convert back to spatial domain
-        E_near_line, E_near_x = idhf(simFov, simRes, E_scatter_fft*bpf_line)
-        
-        E_near_line = (E_near_line-np.mean(E_near_line))/np.std(E_near_line)
-        
-        # shift the scattering field in the spacial domain for visualization
-        Et = E_near_line + 1
-        
-        X_test[idx,:,0] = np.real(Et)
-        X_test[idx,:,1] = np.imag(Et)
-        
-        X_test_intensity[idx,:,0] = np.abs(Et)**2
-        
-        # print progress
-        cnt += 1
-        sys.stdout.write('\r' + str(round(cnt / num_test * 100, 2))  + ' %')
-        sys.stdout.flush() # important
-    
-    print()
-    print('Evaluating complex model \n')
     # handle complex model first
-    complex_error[NA_idx, :] = calculate_error(X_test, option = 'complex')
+    complex_error[NA_idx, :] = calculate_error(X_test, y_test_ds, option = 'complex')
     
-    print('Evaluating intensity model \n')
     # handle intensity model second
-    intensity_error[NA_idx, :] = calculate_error(X_test_intensity, option = 'intensity')
+    absolute_error[NA_idx, :] = calculate_error(X_test_absolute, y_test_ds, option = 'intensity')
+    # print progress
+    cnt += 1
+    sys.stdout.write('\r' + str(round(cnt / nb_NA * 100, 2))  + ' %')
+    sys.stdout.flush() # important
     
 # save the error file
-np.save(r'D:\irimages\irholography\CNN\ANN_v2_far_line\complex_error_to0.3', complex_error)
-np.save(r'D:\irimages\irholography\CNN\ANN_v2_far_line\intensity_error_to0.3', intensity_error)
+np.save(r'D:\irimages\irholography\CNN\ANN_more_bandpass_HD\result\complex_error_bp'+str(num_nodes)+'nodes', complex_error)
+np.save(r'D:\irimages\irholography\CNN\ANN_more_bandpass_HD\result\absolute_error_bp'+str(num_nodes)+'nodes', absolute_error)
 
 #%%
 # plot out the error
 plt.figure()
-plt.subplot(311)
-plt.plot(NA_list, complex_error[:, 0], label = 'Complex CNN')
-plt.plot(NA_list, intensity_error[:, 0], label = 'Intensity CNN')
+plt.subplot(131)
+plt.plot(NA_list, complex_error[:, 0], label = 'Complex ANN')
+plt.plot(NA_list, absolute_error[:, 0], label = 'Absolute ANN')
 plt.xlabel('NA')
 plt.ylabel('Relative Error (Refractive Index)')
 plt.legend()
 
-plt.subplot(312)
-plt.plot(NA_list, complex_error[:, 1], label = 'Complex CNN')
-plt.plot(NA_list, intensity_error[:, 1], label = 'Intensity CNN')
+plt.subplot(132)
+plt.plot(NA_list, complex_error[:, 1], label = 'Complex ANN')
+plt.plot(NA_list, absolute_error[:, 1], label = 'Absolute ANN')
 plt.xlabel('NA')
 plt.ylabel('Relative Error (Attenuation Coefficient)')
 plt.legend()
 
-plt.subplot(313)
-plt.plot(NA_list, complex_error[:, 2], label = 'Complex CNN')
-plt.plot(NA_list, intensity_error[:, 2], label = 'Intensity CNN')
+plt.subplot(133)
+plt.plot(NA_list, complex_error[:, 2], label = 'Complex ANN')
+plt.plot(NA_list, absolute_error[:, 2], label = 'Absolute ANN')
 plt.xlabel('NA')
 plt.ylabel('Relative Error (Sphere Radius)')
 plt.legend()
+
+plt.suptitle('Bandpass Error '+str(num_nodes)+' nodes')
+
+#%%
+#plt.figure()
+#plt.subplot(311)
+#plt.plot(NA_list[10:], complex_error[10:, 0], label = 'Complex ANN')
+#plt.plot(NA_list[10:], absolute_error[10:, 0], label = 'Absolute ANN')
+#plt.xlabel('NA')
+#plt.ylabel('Relative Error (Refractive Index)')
+#plt.legend()
+#
+#plt.subplot(312)
+#plt.plot(NA_list[10:], complex_error[10:, 1], label = 'Complex ANN')
+#plt.plot(NA_list[10:], absolute_error[10:, 1], label = 'Absolute ANN')
+#plt.xlabel('NA')
+#plt.ylabel('Relative Error (Attenuation Coefficient)')
+#plt.legend()
+#
+#plt.subplot(313)
+#plt.plot(NA_list[10:], complex_error[10:, 2], label = 'Complex ANN')
+#plt.plot(NA_list[10:], absolute_error[10:, 2], label = 'Absolute ANN')
+#plt.xlabel('NA')
+#plt.ylabel('Relative Error (Sphere Radius)')
+#plt.legend()
+#
+#plt.suptitle('Bandpass Error '+str(num_nodes)+' nodes (Partial)')

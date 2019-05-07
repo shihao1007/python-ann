@@ -1,5 +1,14 @@
 # -*- coding: utf-8 -*-
 """
+Created on Sun May  5 18:47:55 2019
+
+Editor:
+    Shihao Ran
+    STIM Laboratory
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Apr 15 13:50:22 2019
 
 A simple Neural Net work trained on 1D Mie scattering simulations
@@ -52,15 +61,18 @@ channel = 2
 # initialize regressor
 regressor = Sequential()
 # add the first hidden layer
-regressor.add(Dense(num_nodes, input_shape=(line_length,channel,),
-                    kernel_initializer=glorot_normal(seed=25),
-                    activation='tanh'))
+regressor.add(Dense(640, input_shape=(line_length,channel,), activation='relu'))
+regressor.add(Dense(320))
 # add a Flatten layer to reduce the dimention of the feature map to 1-D
 regressor.add(Flatten())
 # add the output layer with 3 units
-regressor.add(Dense(3, kernel_initializer=glorot_normal(seed=25)))
+regressor.add(Dense(160))
+# add the output layer with 3 units
+regressor.add(Dense(3))
 # compile the regressor with 'adam' optimizer
 regressor.compile('adam', loss = 'mean_squared_error')
+print(regressor.summary())
+#%%
 
 # preload the training and testing set and the label set
 X_train = np.load(r'D:\irimages\irholography\CNN\ANN_simple_test\data\X_train.npy')
@@ -72,13 +84,13 @@ y_test = np.load(r'D:\irimages\irholography\CNN\ANN_simple_test\data\y_test.npy'
 y_train[:,1] *= 100
 
 # specify the path of the trained model
-model_path = r'D:\irimages\irholography\CNN\ANN_simple_test\model\complex_model_'+str(num_nodes)+'nodes'
+model_path = r'D:\irimages\irholography\CNN\ANN_simple_test\model\beta_complex_model_'+str(num_nodes)+'nodes'
 # early_stopping_monitor = EarlyStopping(patience=4)
 model_check = ModelCheckpoint(model_path, save_best_only=True)
 #%%
 # fit the model with training and testing set
 history = regressor.fit(x = X_train, y = y_train, batch_size = 200,
-                        epochs = 400,
+                        epochs = 200,
                         validation_split = 0.2,
                         callbacks=[model_check])
 
